@@ -42,6 +42,8 @@ architecture Behavioral of SPI_tb is
         read_en : in std_logic; -- signal from main controller that it is ready to read a new word
         data_in_1 : in std_logic; -- data incoming from channel 1
         data_in_2 : in std_logic; -- data incoming from channel 2
+        data_ready : out std_logic;
+        next_sample : out std_logic;
         chip_sel : out std_logic; -- signal to tell ADC to start sending a new word
         data_out_1 : out std_logic_vector(11 downto 0); -- channel 1 output word
         data_out_2 : out std_logic_vector(11 downto 0) -- channel 2 output word
@@ -55,6 +57,7 @@ architecture Behavioral of SPI_tb is
     signal data_out_1, data_out_2 : std_logic_vector(11 downto 0) := (others => '0'); 
     signal test_word_1 : std_logic_vector(11 downto 0) := x"A5A"; -- 101001011010
     signal test_word_2 : std_logic_vector(11 downto 0) := x"3C3"; -- 001111000011
+    signal data_ready,next_sample : std_logic;
     
 begin
 
@@ -66,6 +69,8 @@ begin
         data_in_1 => data_in_1,
         data_in_2 => data_in_2,
         chip_sel => chip_sel,
+        data_ready => data_ready,
+        next_sample => next_sample,
         data_out_1 => data_out_1,
         data_out_2 => data_out_2
     );
@@ -77,26 +82,16 @@ begin
         wait for 4 ns;
     end process clk_proc;
     
---    clk_div : process begin -- serial clock is  5 MHz
---        clk_tick <= '0';
---        wait for 200 ns;
---        clk_tick <= '1';
---        wait for 8 ns;
---    end process clk_div;
-    
     process begin
         reset <= '1';
         wait for 8 ns;
         reset <= '0';
         
-        wait for 168 ns;
+        wait for 2000 ns;
         read_en <= '1';
         wait for 8 ns;
         read_en <= '0';
         
-        for i in 0 to 9 loop
-            wait until clk_tick = '1';
-        end loop;
         
         
         for index in 0 to 15 loop
@@ -111,6 +106,14 @@ begin
         end loop;
         wait;
     end process;
+    
+    
+
+
+
+    
+end Behavioral;
+
     
     
 
