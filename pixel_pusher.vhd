@@ -81,7 +81,7 @@ begin
     -- Convert Voltage to Y-Coordinate on screen
     wave_y_pos <= to_unsigned(480, 10) - resize(scaled_adc_val, 10) when scaled_adc_val < 480 else to_unsigned(0, 10);
 
-    -- PROCESS 1: UI State Management
+    -- UI State Management
     process(clk)
         variable joy_y_val : integer;
     begin
