@@ -31,12 +31,13 @@ use IEEE.NUMERIC_STD.ALL;
 --library UNISIM;
 --use UNISIM.VComponents.all;
 
+
 entity Frame_buffers is
   Port (clk, pix_tick, fb_reset : in std_logic;
-        sys_tick : in std_logic;
+--        sys_tick : in std_logic;
         addr_1,addr_2 : in std_logic_vector(11 downto 0); -- port 2 is vga, port 1 is system
         wr_en1 : in std_logic;
-        din1 : in std_logic_vector(15 downto 0);
+        din1 : in std_logic_vector(11 downto 0);
         dout1, dout2 : out std_logic_vector(11 downto 0));
 end Frame_buffers;
 
