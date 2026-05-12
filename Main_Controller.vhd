@@ -21,61 +21,59 @@
 
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
-
--- Uncomment the following library declaration if using
--- arithmetic functions with Signed or Unsigned values
 use IEEE.NUMERIC_STD.ALL;
-
--- Uncomment the following library declaration if instantiating
--- any Xilinx leaf cells in this code.
---library UNISIM;
---use UNISIM.VComponents.all;
 
 entity Main_Controller is
   Port (
         -- Universal Signals
-        clk : in std_logic; -- main clock
-        reset : in std_logic; -- reset button
+        clk : in std_logic;
+        reset : in std_logic;
         
         -- SPI Controller
-        SPI_data_acq : in std_logic; -- data is read and we can move to the next state
-        next_sample : in std_logic; -- ready to read next sample
-        SPI_data_in_1 : in std_logic_vector(11 downto 0); -- channel 1 output word
+        SPI_data_acq : in std_logic;
+        next_sample : in std_logic;
+        SPI_data_in_1 : in std_logic_vector(11 downto 0);
         SPI_data_in_2 : in std_logic_vector(11 downto 0);
-        SPI_read_en : out std_logic; -- signal SPI to begin read
+        SPI_read_en : out std_logic;
         
         -- Dual Port Ram 1
         fb_addr_1 : out std_logic_vector(11 downto 0);
         fb_wr_en_1 : out std_logic;
-        fb_data_out_1 : out std_logic_vector(23 downto 0);
+        fb_data_out_1 : out std_logic_vector(11 downto 0);
         
         -- Dual Port Ram 2
         fb_addr_2 : out std_logic_vector(11 downto 0);
         fb_wr_en_2 : out std_logic;
-        fb_data_out_2 : out std_logic_vector(23 downto 0);
+        fb_data_out_2 : out std_logic_vector(11 downto 0);
         
         -- VGA
         vsync : in std_logic;
-        pixel_read_en : out std_logic
+        pixel_read_en : out std_logic;
+        
+        -- NEW: freeze signal from pixel_pusher
+        -- When high, hold in VGA_disp indefinitely so BRAM
+        -- stops receiving new writes and display stays locked
+        frozen : in std_logic
    );
 end Main_Controller;
 
 architecture Behavioral of Main_Controller is
     type state is(
-                        idle, -- waits for enable signal(switch)
-                        SPI_read, -- reads data from SPI
-                        conversion, -- converts position into voltage value
-                        fb_write,  -- writes data to frame buffer
-                        VGA_disp,  -- waits for vga_controller to read everything
-                        delay); -- necessary delay to allow for quiet time and buffer time
+                        idle,
+                        SPI_read,
+                        conversion,
+                        fb_write,
+                        VGA_disp,
+                        delay);
     signal control_state : state := idle;
     signal SPI_data_1, SPI_data_2 : std_logic_vector(11 downto 0) := (others => '0');
-    signal samp_speed : integer range 0 to 399; -- 312.5 ksps
+    signal samp_speed : integer range 0 to 399;
     signal trigger_read : std_logic := '0';
     signal millivolt_conv : std_logic_vector(11 downto 0) := "110011100100";
     signal millivolt_1,millivolt_2 : std_logic_vector(23 downto 0);
-    signal mem_counter : integer range 0 to 639;
+    signal mem_counter : integer range 0 to 640;
     signal delay_counter : integer range 0 to 6;
+    signal trigger_pending: std_logic := '0';
     
 begin
 
@@ -90,35 +88,39 @@ begin
                 pixel_read_en <= '0';
                 fb_wr_en_1 <= '1';
                 fb_wr_en_2 <= '0';
+                trigger_pending <= '0';
             else
+                if trigger_read = '1' then
+                    trigger_pending <= '1'; end if;
                 SPI_read_en <= '0';
                 pixel_read_en <= '0';
                 fb_wr_en_1 <= '0';
                 fb_wr_en_2 <= '0';
                 case(control_state) is
                     when idle =>
-                        if((next_sample = '1') and (trigger_read <= '1') and (mem_counter < 640)) then
+                        if((next_sample = '1') and (trigger_pending = '1') and (mem_counter < 640)) then
                             control_state <= SPI_read;
                             SPI_read_en <= '1';
-                        elsif(mem_counter = 639) then
+                            trigger_pending <= '0';
+                        elsif(mem_counter = 640) then
                             control_state <= VGA_disp;
                             pixel_read_en <= '1';
                             mem_counter <= 0;
                         end if;
                         
-                    when SPI_read => --12.5 MHz sclk -> 1.24 us per sample  
+                    when SPI_read =>
                         if(SPI_data_acq = '1') then 
                             SPI_data_1 <= SPI_data_in_1;
                             SPI_data_2 <= SPI_data_in_2;
                             control_state <= conversion;
                         end if;                        
                     
-                    when conversion => -- 8 ns
+                    when conversion =>
                         millivolt_1 <= std_logic_vector(unsigned(millivolt_conv) * unsigned(SPI_data_1));
                         millivolt_2 <= std_logic_vector(unsigned(millivolt_conv) * unsigned(SPI_data_2));
                         control_state <= fb_write;
                         
-                    when fb_write => -- 8 ns 
+                    when fb_write =>
                         fb_wr_en_1 <= '1';
                         fb_data_out_1 <= millivolt_1(23 downto 12);
                         fb_addr_1 <= std_logic_vector(to_unsigned(mem_counter,12));
@@ -131,16 +133,18 @@ begin
                         control_state <= delay;
                         
                     when delay =>
-                        if(delay_counter = 6) then -- 56 ns
+                        if(delay_counter = 6) then
                             delay_counter <= 0;
                             control_state <= idle;
                         else
                             delay_counter <= delay_counter + 1;
                         end if;
                         
-                        
-                    when VGA_disp => --1.43 us before new frame
-                        if(vsync = '0') then -- 1 frame written, RAM is fully read, can grab next dataset
+                    when VGA_disp =>
+                        -- NEW: only exit VGA_disp if vsync fires AND display
+                        -- is not frozen. When frozen=1 we stay here indefinitely,
+                        -- keeping BRAM writes stopped and the display locked.
+                        if(vsync = '0' and frozen = '0') then
                             control_state <= idle;
                         end if;
                     
@@ -148,7 +152,6 @@ begin
             end if;
         end if;
     end process;
-    
     
     Sample_speed : process(clk) begin
         if(rising_edge(clk)) then

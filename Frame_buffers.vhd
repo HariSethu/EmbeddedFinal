@@ -38,7 +38,7 @@ entity Frame_buffers is
         addr_1,addr_2 : in std_logic_vector(11 downto 0); -- port 2 is vga, port 1 is system
         wr_en1 : in std_logic;
         din1 : in std_logic_vector(11 downto 0);
-        dout1, dout2 : out std_logic_vector(11 downto 0));
+        dout2 : out std_logic_vector(11 downto 0));
 end Frame_buffers;
 
 architecture Behavioral of Frame_buffers is
@@ -64,7 +64,6 @@ begin
                     if(wr_en1 = '1') then
                         memory(to_integer(unsigned(addr_1))) <= din1;
                     end if;
-                    dout1 <= memory(to_integer(unsigned(addr_1)));
                     
                     if(pix_tick = '1') then
                         dout2 <= memory(to_integer(unsigned(addr_2)));
